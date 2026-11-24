@@ -19,6 +19,7 @@ from ..schema import (
 )
 from ..skrl_compat import deterministic_action
 from ..task_math import inject_observation_estimate
+from .torque import TorqueNoiseCfg, TorqueSensorModel
 
 
 def unwrap_direct_env(env):
@@ -41,17 +42,59 @@ class PolicyAdapter(ABC):
     #: body-frame angular velocity and the projected gravity vector, three each.
     IMU_INPUT_DIM = 6
 
-    def __init__(self, env, joint_preset: str = "all", use_imu: bool = False):
+    def __init__(
+        self,
+        env,
+        joint_preset: str = "all",
+        use_imu: bool = False,
+        use_torque: bool = False,
+        torque_source: str = "pd",
+        torque_noise: TorqueNoiseCfg | None = None,
+        use_action: bool = False,
+    ):
         self.env = env
         self.core_env = unwrap_direct_env(env)
         _, _, names = self.core_env.get_estimator_joint_state()
         self.joint_preset = joint_preset
         self.joint_ids = joint_indices(names, joint_preset)
         self.use_imu = bool(use_imu)
+        self.use_torque = bool(use_torque)
+        self.torque_source = torque_source
+        self.torque_noise = torque_noise or TorqueNoiseCfg()
+        self.use_action = bool(use_action)
+        self.torque_sensor = (
+            TorqueSensorModel(self.core_env, self.joint_ids, torque_source, self.torque_noise)
+            if self.use_torque
+            else None
+        )
 
     @property
     def input_dim(self) -> int:
-        return 2 * len(self.joint_ids) + (self.IMU_INPUT_DIM if self.use_imu else 0)
+        return (
+            2 * len(self.joint_ids)
+            + (self.IMU_INPUT_DIM if self.use_imu else 0)
+            + (len(self.joint_ids) if self.use_torque else 0)
+            + (self.schema.action_dim if self.use_action else 0)
+        )
+
+    def input_config(self) -> dict:
+        """What the estimator reads, stored in checkpoints so loaders rebuild the same adapter."""
+        return {
+            "imu_input": self.use_imu,
+            "torque_input": self.use_torque,
+            "torque_source": self.torque_source,
+            "torque_noise": self.torque_noise.to_dict(),
+            "action_input": self.use_action,
+        }
+
+    def _last_action(self) -> torch.Tensor:
+        manager = getattr(self.core_env, "action_manager", None)
+        if manager is not None:
+            return manager.action
+        actions = getattr(self.core_env, "actions", None)
+        if actions is None:
+            raise RuntimeError("Environment exposes neither action_manager nor actions")
+        return actions
 
     def estimator_input(self) -> torch.Tensor:
         # Deliberately use the simulator-provided joint velocity. There is no
@@ -61,18 +104,23 @@ class PolicyAdapter(ABC):
         joints = torch.cat(
             (joint_pos.index_select(1, ids), joint_vel.index_select(1, ids)), dim=-1
         )
-        if not self.use_imu:
+        # Optional channels are appended after the joints in a fixed order
+        # (IMU, torque, action), so the joint block keeps its indices in every arm.
+        extras: list[torch.Tensor] = []
+        if self.use_imu:
+            sensors = self.core_env.get_distillation_sensor_state()
+            extras += [sensors["angular_velocity"], sensors["projected_gravity"]]
+        if self.use_torque:
+            # Motor-current proxy, normalized by the effort limit (estimator/torque.py).
+            extras.append(self.torque_sensor.read().to(joints.dtype))
+        if self.use_action:
+            # Control arm for the torque ablation. The PD torque is a function of
+            # the commanded target, so encoder+action separates the information
+            # carried by the load from the information carried by the command.
+            extras.append(self._last_action().to(joints.dtype))
+        if not extras:
             return joints
-        # Optional IMU input: body angular velocity and projected gravity, read as
-        # *input* only. The estimator still regresses the full privileged target.
-        #
-        # Appended after the joints rather than interleaved, so the joint block
-        # occupies exactly the indices it does without the IMU and the two arms
-        # differ by a suffix.
-        sensors = self.core_env.get_distillation_sensor_state()
-        return torch.cat(
-            (joints, sensors["angular_velocity"], sensors["projected_gravity"]), dim=-1
-        )
+        return torch.cat((joints, *extras), dim=-1)
 
     def estimator_target(self) -> torch.Tensor:
         target = self.core_env.get_estimator_target()
@@ -145,8 +193,8 @@ class PpoWalkPolicyAdapter(PolicyAdapter):
 
     schema = PPO_WALK_OBSERVATION_SCHEMA
 
-    def __init__(self, env, joint_preset: str = "all", use_imu: bool = False):
-        super().__init__(env, joint_preset, use_imu)
+    def __init__(self, env, joint_preset: str = "all", use_imu: bool = False, **input_options):
+        super().__init__(env, joint_preset, use_imu, **input_options)
         self._history_indices = ppo_walk_history_target_indices()
         self._scales: torch.Tensor | None = None
         self._ring: torch.Tensor | None = None
@@ -189,7 +237,14 @@ class PpoWalkPolicyAdapter(PolicyAdapter):
 
 
 def make_policy_adapter(
-    kind: str, env, joint_preset: str = "all", use_imu: bool = False
+    kind: str,
+    env,
+    joint_preset: str = "all",
+    use_imu: bool = False,
+    use_torque: bool = False,
+    torque_source: str = "pd",
+    torque_noise: TorqueNoiseCfg | None = None,
+    use_action: bool = False,
 ) -> PolicyAdapter:
     """Build the adapter for ``kind``.
 
@@ -197,13 +252,19 @@ def make_policy_adapter(
     joint encoders and nothing else.
     Setting it adds the six inertial channels to the estimator's *input* only --
     the target, the injection indices and the policy observation are untouched.
+    ``use_torque`` appends the joint-torque channel (estimator/torque.py) and
+    ``use_action`` the last action, both on the input side only.
     """
+    options = dict(
+        use_torque=use_torque, torque_source=torque_source,
+        torque_noise=torque_noise, use_action=use_action,
+    )
     kind = kind.lower()
     if kind == "amp":
-        return AmpPolicyAdapter(env, joint_preset, use_imu)
+        return AmpPolicyAdapter(env, joint_preset, use_imu, **options)
     # "ppo" named the SKRL Direct PPO walk teacher, which was removed along with
     # its environment. It now resolves to the rsl-rl walk teacher so existing
     # commands and logged run metadata keep working.
     if kind in ("ppo_walk", "ppo"):
-        return PpoWalkPolicyAdapter(env, joint_preset, use_imu)
+        return PpoWalkPolicyAdapter(env, joint_preset, use_imu, **options)
     raise ValueError(f"Unknown policy adapter {kind!r}; choose amp or ppo_walk")

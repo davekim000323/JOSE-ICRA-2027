@@ -241,6 +241,37 @@ python -m jose.train_state_estimator --adapter ppo_walk \
   --eval-episodes 2 --max-episode-steps 50 --run-name smoke --headless
 ```
 
+### Torque input (motor-current proxy)
+
+On a slope, joint kinematics give the base tilt relative to the stance surface,
+while the teacher reads the tilt relative to gravity. The gravity loading term in
+the joint torques carries the difference. `--torque-input` appends a 29-D torque
+channel to the estimator input, divided by each joint's effort limit and passed
+through a sensor model with a per-episode gain error, a per-episode offset,
+white noise and quantization (`estimator/torque.py`, presets `none`, `default`,
+`high`). The default magnitudes are assumptions, not values identified on the G1.
+
+| Flag | Effect |
+|---|---|
+| `--torque-input` | append the torque channel |
+| `--torque-source pd` / `solver` | PD torque the drive commands (default) or the generalized force PhysX applied |
+| `--torque-noise none` / `default` / `high` | sensor model preset |
+| `--action-input` | append the last action, the control arm for the ablation |
+
+Checkpoints record these settings, and `play_teacher_with_estimator.py` rebuilds
+the matching input. Closed-loop evaluations now also report the angle between the
+estimated and true gravity vectors (`tilt_error_deg_mean`, `grid_tilt_error_deg_mean`).
+
+The slope ablation (encoder, encoder plus action, encoder plus torque, encoder plus
+noiseless torque, three seeds each) runs with
+
+```bash
+SMOKE=1 TEACHER=<slope teacher .pt> bash tools/run_slope_torque_ablation.sh   # pipeline check
+TEACHER=<slope teacher .pt> bash tools/run_slope_torque_ablation.sh           # full run
+```
+
+`python tools/smoke_torque_input.py` checks the input path on CPU without Isaac Lab.
+
 ## 3. Run the teacher with JOSE in the loop
 
 `play_teacher_with_estimator.py` runs the teacher on JOSE's estimate in place of
