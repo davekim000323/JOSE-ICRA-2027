@@ -45,6 +45,10 @@ parser.add_argument("--grid-settle-s", dest="grid_settle_s", type=float, default
 parser.add_argument("--grid-measure-s", dest="grid_measure_s", type=float, default=4.0)
 parser.add_argument("--seed", type=int, default=10042)
 parser.add_argument("--output", required=True)
+parser.add_argument("--keep-terrain", dest="keep_terrain", action="store_true",
+                    help="Diagnostic: keep the task's terrain but still drop the terrain curriculum term")
+parser.add_argument("--keep-curriculum", dest="keep_curriculum", action="store_true",
+                    help="Diagnostic: override the terrain but keep the terrain curriculum term")
 AppLauncher.add_app_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
 
@@ -88,11 +92,13 @@ def main(env_cfg, agent_cfg):
     env_cfg.scene.num_envs = args_cli.num_envs
     env_cfg.sim.device = args_cli.device
     env_cfg.seed = args_cli.seed
-    if not args_cli.no_terrain_override:
+    override_terrain = not (args_cli.no_terrain_override or args_cli.keep_terrain)
+    drop_curriculum = not (args_cli.no_terrain_override or args_cli.keep_curriculum)
+    if override_terrain:
         env_cfg.scene.terrain.terrain_generator = fixed_slope_terrain_cfg(args_cli.slope)
         env_cfg.scene.terrain.max_init_terrain_level = None
-        if getattr(env_cfg, "curriculum", None) is not None and hasattr(env_cfg.curriculum, "terrain_levels"):
-            env_cfg.curriculum.terrain_levels = None
+    if drop_curriculum and getattr(env_cfg, "curriculum", None) is not None and hasattr(env_cfg.curriculum, "terrain_levels"):
+        env_cfg.curriculum.terrain_levels = None
 
     env, teacher_agent = build_env_and_teacher(
         args_cli.task, "ppo_walk", env_cfg, agent_cfg,
@@ -100,7 +106,8 @@ def main(env_cfg, agent_cfg):
     )
     report = {
         "slope_ratio": None if args_cli.no_terrain_override else args_cli.slope,
-        "terrain_override": not args_cli.no_terrain_override,
+        "terrain_override": not (args_cli.no_terrain_override or args_cli.keep_terrain),
+        "curriculum_dropped": not (args_cli.no_terrain_override or args_cli.keep_curriculum),
         "slope_deg": None if args_cli.no_terrain_override else math.degrees(math.atan(args_cli.slope)),
         "task": args_cli.task,
         "teacher_checkpoint": str(Path(args_cli.teacher_checkpoint).resolve()),
