@@ -293,3 +293,109 @@ class G1WalkSlopeEstimatorEnvCfg(G1WalkSlopeEnvCfg):
 @configclass
 class G1WalkSlopeEstimatorPlayEnvCfg(G1WalkSlopePlayEnvCfg):
     observations: EstimatorObservationsCfg = EstimatorObservationsCfg()
+
+
+# =============================================================================
+# Steep slope
+# =============================================================================
+
+#: Steeper slopes, no flat share and no curriculum.
+#:
+#: The slope teacher trained on ``SLOPE_TERRAINS_CFG`` plateaued at a mean
+#: terrain level near 2.1 of 10, which on that generator is a slope ratio near
+#: 0.1, about 5 to 6 degrees. On terrain that gentle the tilt relative to the
+#: ground and the tilt relative to gravity barely differ, so it cannot test the
+#: torque input. This variant draws every tile's difficulty uniformly from
+#: ``difficulty_range`` instead of letting the curriculum hold robots on easy
+#: rows, and widens the slope range to 0.5 (26.6 degrees). Slope here is
+#: rise over run, as in ``HfPyramidSlopedTerrainCfg``.
+#:
+#: It is meant to fine-tune the converged slope teacher (``--resume``), not to
+#: train from scratch.
+STEEP_SLOPE_RANGE = (0.0, 0.5)
+STEEP_DIFFICULTY_RANGE = (0.2, 1.0)  # slope ratio 0.1 to 0.5, 5.7 to 26.6 degrees
+
+STEEP_SLOPE_TERRAINS_CFG = TerrainGeneratorCfg(
+    seed=43,
+    size=(8.0, 8.0),
+    border_width=20.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.1,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=True,
+    curriculum=False,
+    difficulty_range=STEEP_DIFFICULTY_RANGE,
+    sub_terrains={
+        "slope": terrain_gen.HfPyramidSlopedTerrainCfg(
+            proportion=0.5, slope_range=STEEP_SLOPE_RANGE, platform_width=2.0, border_width=0.25
+        ),
+        "slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
+            proportion=0.5, slope_range=STEEP_SLOPE_RANGE, platform_width=2.0, border_width=0.25
+        ),
+    },
+)
+
+
+@configclass
+class G1WalkSteepSlopeEnvCfg(G1WalkSlopeEnvCfg):
+    """Blind locomotion over pyramid slopes of 0.1 to 0.5, sampled uniformly."""
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.scene.terrain.terrain_generator = STEEP_SLOPE_TERRAINS_CFG
+        self.scene.terrain.max_init_terrain_level = None
+        # Rows carry random difficulty here, so moving robots between rows
+        # would mean nothing.
+        self.curriculum.terrain_levels = None
+
+
+@configclass
+class G1WalkSteepSlopePlayEnvCfg(G1WalkSteepSlopeEnvCfg):
+    def __post_init__(self):
+        super().__post_init__()
+        self.scene.num_envs = 64
+        self.scene.env_spacing = 2.5
+        self.observations.policy.enable_corruption = False
+        self.events.base_external_force_torque = None
+        self.episode_length_s = 60.0
+
+
+@configclass
+class G1WalkSteepSlopeEstimatorEnvCfg(G1WalkSteepSlopeEnvCfg):
+    observations: EstimatorObservationsCfg = EstimatorObservationsCfg()
+
+
+@configclass
+class G1WalkSteepSlopeEstimatorPlayEnvCfg(G1WalkSteepSlopePlayEnvCfg):
+    observations: EstimatorObservationsCfg = EstimatorObservationsCfg()
+
+
+def fixed_slope_terrain_cfg(slope: float) -> TerrainGeneratorCfg:
+    """A small terrain whose every tile is a pyramid of exactly ``slope``.
+
+    Used by ``tools/eval_slope_sweep.py`` to measure estimators and the teacher
+    at one slope at a time. Half the tiles are pyramids and half inverted
+    pyramids, so robots walk both up and down.
+    """
+    return TerrainGeneratorCfg(
+        seed=7,
+        size=(8.0, 8.0),
+        border_width=20.0,
+        num_rows=4,
+        num_cols=8,
+        horizontal_scale=0.1,
+        vertical_scale=0.005,
+        slope_threshold=0.75,
+        use_cache=False,
+        curriculum=False,
+        sub_terrains={
+            "slope": terrain_gen.HfPyramidSlopedTerrainCfg(
+                proportion=0.5, slope_range=(slope, slope), platform_width=2.0, border_width=0.25
+            ),
+            "slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
+                proportion=0.5, slope_range=(slope, slope), platform_width=2.0, border_width=0.25
+            ),
+        },
+    )
