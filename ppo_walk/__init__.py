@@ -9,3 +9,4 @@ https://github.com/unitreerobotics/unitree_rl_lab
 # them before ``AppLauncher`` pulls in no Isaac Lab module.
 from . import terrain_tasks  # noqa: F401,E402
 from . import push_tasks  # noqa: F401,E402
+from . import box_carry_tasks  # noqa: F401,E402

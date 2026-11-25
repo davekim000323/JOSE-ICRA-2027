@@ -37,7 +37,7 @@ parser = argparse.ArgumentParser(description="JOSE G1 state-estimator training")
 parser.add_argument("--teacher_checkpoint", "--teacher-checkpoint", dest="teacher_checkpoint", required=True)
 parser.add_argument("--task", default="Isaac-G1-AMP-Walk-JOSE-Direct-v0")
 parser.add_argument("--agent_cfg_entry_point", "--agent", dest="agent", default="skrl_amp_cfg_entry_point")
-parser.add_argument("--adapter", choices=("amp", "ppo_walk"), default="amp")
+parser.add_argument("--adapter", choices=("amp", "ppo_walk", "box_carry"), default="amp")
 parser.add_argument("--joint_preset", "--joint-preset", dest="joint_preset", choices=("all", "legs", "upper"), default="all")
 parser.add_argument(
     "--torque_input", "--torque-input", dest="torque_input", action="store_true",
@@ -327,6 +327,9 @@ def main(env_cfg, agent_cfg):
         """
         if locomotion:
             return (-result["track_error_norm"], -result["death_rate"], -result["rmse"])
+        if "delivery_rate" in result:
+            # Box carry: did the box reach the goal, then how long it stayed there.
+            return (result["delivery_rate"], result["delivered_time_frac"], -result["death_rate"], -result["rmse"])
         return (result["episode_length_mean"], -result["death_rate"], -result["rmse"])
 
     closed_loop = evaluate(0)

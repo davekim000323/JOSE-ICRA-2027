@@ -315,6 +315,12 @@ def evaluate_estimator_closed_loop(
     metrics = MetricAccumulator()
     previous_action = torch.zeros((observations.shape[0], adapter.schema.action_dim), device=observations.device)
     max_steps = max_episode_steps * max(1, (episodes + observations.shape[0] - 1) // observations.shape[0] + 1)
+    # Box-carry task metric. Envs without ``box_success`` skip all of this.
+    box_success = getattr(adapter.core_env, "box_success", None)
+    delivered_steps = torch.zeros_like(returns)
+    ever_delivered = torch.zeros_like(returns, dtype=torch.bool)
+    completed_delivered: list[bool] = []
+    completed_delivered_frac: list[float] = []
     for _ in range(max_steps):
         frame = adapter.estimator_input()
         target = adapter.estimator_target()
@@ -329,6 +335,11 @@ def evaluate_estimator_closed_loop(
             tilt_error_sq_sum += float(tilt.double().square().sum())
         action = adapter.action(teacher_agent, adapter.inject_estimate(observations, estimate))
         driving_observations = observations
+        if box_success is not None:
+            # Read before the step: auto-reset overwrites the box state of envs that finish.
+            delivered_now = box_success().flatten().to(delivered_steps.dtype)
+            delivered_steps += delivered_now
+            ever_delivered |= delivered_now > 0.5
         observations, rewards, terminated, truncated, _ = env.step(action)
         returns += rewards.flatten()
         lengths += 1
@@ -353,6 +364,13 @@ def evaluate_estimator_closed_loop(
             selected = done_ids[:remaining]
             completed_returns.extend(returns[selected].cpu().tolist())
             completed_lengths.extend(lengths[selected].cpu().tolist())
+            if box_success is not None:
+                completed_delivered.extend(ever_delivered[selected].cpu().tolist())
+                completed_delivered_frac.extend(
+                    (delivered_steps[selected] / lengths[selected].clamp(min=1)).cpu().tolist()
+                )
+                delivered_steps[done_ids] = 0.0
+                ever_delivered[done_ids] = False
             deaths += int(terminated[selected].sum())
             timeouts += int((truncated[selected] & ~terminated[selected]).sum())
             returns[done_ids] = 0.0
@@ -382,6 +400,14 @@ def evaluate_estimator_closed_loop(
         "tilt_error_deg_mean": tilt_error_sum / max(sample_count, 1),
         "tilt_error_deg_rmse": (tilt_error_sq_sum / max(sample_count, 1)) ** 0.5,
         **metrics.mean(),
+        **(
+            {
+                "delivery_rate": 100.0 * sum(completed_delivered) / max(len(completed_delivered), 1),
+                "delivered_time_frac": float(np.mean(completed_delivered_frac)) if completed_delivered_frac else 0.0,
+            }
+            if box_success is not None
+            else {}
+        ),
     }
 
 

@@ -9,6 +9,10 @@ import torch
 
 from ..schema import (
     AMP_OBSERVATION_SCHEMA,
+    BOX_CARRY_HISTORY_LENGTH,
+    BOX_CARRY_OBSERVATION_SCHEMA,
+    box_carry_history_target_indices,
+    box_carry_target_scales,
     G1_KEY_BODY_NAMES,
     PPO_WALK_OBSERVATION_SCHEMA,
     ObservationSchema,
@@ -236,6 +240,41 @@ class PpoWalkPolicyAdapter(PolicyAdapter):
         return inject_observation_estimate(observations, self._push(estimate), self._history_indices)
 
 
+class BoxCarryPolicyAdapter(PpoWalkPolicyAdapter):
+    """Box-carry teacher. Same rsl-rl plumbing as the walk, wider 12-D target.
+
+    The target adds per-hand contact force and payload mass to the 9-D base
+    state. Injection overwrites the full five-frame history of all five
+    estimated terms, for the same reason as the walk adapter.
+    """
+
+    schema = BOX_CARRY_OBSERVATION_SCHEMA
+
+    def __init__(self, env, joint_preset: str = "all", use_imu: bool = False, **input_options):
+        super().__init__(env, joint_preset, use_imu, **input_options)
+        self._history_indices = box_carry_history_target_indices()
+
+    def name(self) -> str:
+        return "box_carry"
+
+    def _scaled(self, estimate: torch.Tensor) -> torch.Tensor:
+        if self._scales is None:
+            self._scales = torch.tensor(box_carry_target_scales(), device=estimate.device, dtype=estimate.dtype)
+        return estimate * self._scales
+
+    def _push(self, estimate: torch.Tensor) -> torch.Tensor:
+        scaled = self._scaled(estimate)
+        if self._ring is None or self._ring.shape[0] != scaled.shape[0]:
+            self._ring = scaled.unsqueeze(1).repeat(1, BOX_CARRY_HISTORY_LENGTH, 1)
+        else:
+            self._ring = torch.roll(self._ring, -1, dims=1)
+            self._ring[:, -1] = scaled
+            just_reset = self.core_env.episode_length_buf == 0
+            if bool(just_reset.any()):
+                self._ring[just_reset] = scaled[just_reset].unsqueeze(1)
+        return self._ring.reshape(scaled.shape[0], -1)
+
+
 def make_policy_adapter(
     kind: str,
     env,
@@ -267,4 +306,6 @@ def make_policy_adapter(
     # commands and logged run metadata keep working.
     if kind in ("ppo_walk", "ppo"):
         return PpoWalkPolicyAdapter(env, joint_preset, use_imu, **options)
-    raise ValueError(f"Unknown policy adapter {kind!r}; choose amp or ppo_walk")
+    if kind == "box_carry":
+        return BoxCarryPolicyAdapter(env, joint_preset, use_imu, **options)
+    raise ValueError(f"Unknown policy adapter {kind!r}; choose amp, ppo_walk or box_carry")

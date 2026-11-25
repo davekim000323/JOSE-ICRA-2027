@@ -224,3 +224,99 @@ def ppo_walk_target_scales() -> tuple[float, ...]:
     for name in PPO_WALK_ESTIMATOR_TERMS:
         scales.extend([layout[name]] * 3)
     return tuple(scales)
+
+
+# Manager-based G1 box-carry layout (``ppo_walk/box_carry_env_cfg.py``). Same
+# per-term history convention as the walk task. The first five terms are the
+# privileged state JOSE reconstructs, so they sit in front and stay contiguous.
+#
+#   base_lin_vel(5x3) base_ang_vel(5x3) projected_gravity(5x3)
+#   hand_contact_force(5x2) payload_mass(5x1)
+#   box_pos_b(5x3) box_axis_b(5x3) goal_pos_b(5x3)
+#   joint_pos_rel(5x29) joint_vel_rel(5x29) last_action(5x29)       = 540
+BOX_CARRY_HISTORY_LENGTH = 5
+_BOX_CARRY_TERMS = (
+    # (name, per-frame dim, observation scale applied by the manager)
+    ("base_lin_vel", 3, 1.0),
+    ("base_ang_vel", 3, 0.2),
+    ("projected_gravity", 3, 1.0),
+    ("hand_contact_force", 2, 1.0),
+    ("payload_mass", 1, 1.0),
+    ("box_pos_b", 3, 1.0),
+    ("box_axis_b", 3, 1.0),
+    ("goal_pos_b", 3, 1.0),
+    ("joint_pos_rel", 29, 1.0),
+    ("joint_vel_rel", 29, 0.05),
+    ("last_action", 29, 1.0),
+)
+
+
+def _block_layout(terms, history):
+    layout, start = [], 0
+    for name, dim, scale in terms:
+        layout.append((name, dim, start, scale))
+        start += dim * history
+    return tuple(layout), start
+
+
+BOX_CARRY_TERM_LAYOUT, BOX_CARRY_POLICY_DIM = _block_layout(_BOX_CARRY_TERMS, BOX_CARRY_HISTORY_LENGTH)
+BOX_CARRY_ESTIMATOR_TERMS = (
+    "base_lin_vel", "base_ang_vel", "projected_gravity", "hand_contact_force", "payload_mass",
+)
+#: Contact force is in units of 50 N per hand, payload in kg (see box_carry_mdp).
+BOX_CARRY_TARGET_NAMES = (
+    "base_lin_vel_x", "base_lin_vel_y", "base_lin_vel_z",
+    "base_ang_vel_x", "base_ang_vel_y", "base_ang_vel_z",
+    "projected_gravity_x", "projected_gravity_y", "projected_gravity_z",
+    "left_hand_contact_force", "right_hand_contact_force",
+    "payload_mass",
+)
+
+
+def _newest_frame_indices(layout, terms, history):
+    table = {name: (dim, start) for name, dim, start, _ in layout}
+    out: list[int] = []
+    for name in terms:
+        dim, start = table[name]
+        offset = start + (history - 1) * dim
+        out.extend(range(offset, offset + dim))
+    return tuple(out)
+
+
+def _all_frame_indices(layout, terms, history):
+    """Every history slot of ``terms``, frame by frame, newest frame last."""
+    table = {name: (dim, start) for name, dim, start, _ in layout}
+    out: list[int] = []
+    for frame in range(history):
+        for name in terms:
+            dim, start = table[name]
+            offset = start + frame * dim
+            out.extend(range(offset, offset + dim))
+    return tuple(out)
+
+
+_BOX_LAYOUT_TABLE = {name: (dim, start) for name, dim, start, _ in BOX_CARRY_TERM_LAYOUT}
+
+BOX_CARRY_OBSERVATION_SCHEMA = ObservationSchema(
+    name=f"g1_box_carry_{BOX_CARRY_POLICY_DIM}",
+    policy_dim=BOX_CARRY_POLICY_DIM,
+    joint_position_start=_BOX_LAYOUT_TABLE["joint_pos_rel"][1] + 4 * 29,
+    joint_velocity_start=_BOX_LAYOUT_TABLE["joint_vel_rel"][1] + 4 * 29,
+    estimator_target_indices=_newest_frame_indices(
+        BOX_CARRY_TERM_LAYOUT, BOX_CARRY_ESTIMATOR_TERMS, BOX_CARRY_HISTORY_LENGTH
+    ),
+    estimator_target_names=BOX_CARRY_TARGET_NAMES,
+)
+
+
+def box_carry_history_target_indices() -> tuple[int, ...]:
+    return _all_frame_indices(BOX_CARRY_TERM_LAYOUT, BOX_CARRY_ESTIMATOR_TERMS, BOX_CARRY_HISTORY_LENGTH)
+
+
+def box_carry_target_scales() -> tuple[float, ...]:
+    table = {name: (dim, scale) for name, dim, _, scale in BOX_CARRY_TERM_LAYOUT}
+    scales: list[float] = []
+    for name in BOX_CARRY_ESTIMATOR_TERMS:
+        dim, scale = table[name]
+        scales.extend([scale] * dim)
+    return tuple(scales)
