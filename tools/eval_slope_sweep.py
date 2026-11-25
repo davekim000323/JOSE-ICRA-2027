@@ -30,6 +30,10 @@ from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="JOSE fixed-slope evaluation")
 parser.add_argument("--slope", type=float, required=True, help="Slope ratio (rise over run), e.g. 0.3")
+parser.add_argument(
+    "--no-terrain-override", dest="no_terrain_override", action="store_true",
+    help="Keep the task's own terrain and curriculum (diagnostic: reproduces the training-time evaluation)",
+)
 parser.add_argument("--task", default="Isaac-G1-PPO-Walk-Slope-Estimator-JOSE-v0")
 parser.add_argument("--agent", default="rsl_rl_cfg_entry_point")
 parser.add_argument("--teacher-checkpoint", dest="teacher_checkpoint", required=True)
@@ -84,18 +88,20 @@ def main(env_cfg, agent_cfg):
     env_cfg.scene.num_envs = args_cli.num_envs
     env_cfg.sim.device = args_cli.device
     env_cfg.seed = args_cli.seed
-    env_cfg.scene.terrain.terrain_generator = fixed_slope_terrain_cfg(args_cli.slope)
-    env_cfg.scene.terrain.max_init_terrain_level = None
-    if getattr(env_cfg, "curriculum", None) is not None and hasattr(env_cfg.curriculum, "terrain_levels"):
-        env_cfg.curriculum.terrain_levels = None
+    if not args_cli.no_terrain_override:
+        env_cfg.scene.terrain.terrain_generator = fixed_slope_terrain_cfg(args_cli.slope)
+        env_cfg.scene.terrain.max_init_terrain_level = None
+        if getattr(env_cfg, "curriculum", None) is not None and hasattr(env_cfg.curriculum, "terrain_levels"):
+            env_cfg.curriculum.terrain_levels = None
 
     env, teacher_agent = build_env_and_teacher(
         args_cli.task, "ppo_walk", env_cfg, agent_cfg,
         str(Path(args_cli.teacher_checkpoint).resolve()), args_cli.device, seed=args_cli.seed,
     )
     report = {
-        "slope_ratio": args_cli.slope,
-        "slope_deg": math.degrees(math.atan(args_cli.slope)),
+        "slope_ratio": None if args_cli.no_terrain_override else args_cli.slope,
+        "terrain_override": not args_cli.no_terrain_override,
+        "slope_deg": None if args_cli.no_terrain_override else math.degrees(math.atan(args_cli.slope)),
         "task": args_cli.task,
         "teacher_checkpoint": str(Path(args_cli.teacher_checkpoint).resolve()),
         "num_envs": args_cli.num_envs,
