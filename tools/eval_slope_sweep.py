@@ -73,6 +73,19 @@ from jose.ppo_walk.terrain_env_cfg import fixed_slope_terrain_cfg  # noqa: E402
 from jose.teacher_setup import build_env_and_teacher  # noqa: E402
 
 
+class _OracleEstimator(torch.nn.Module):
+    """Returns the simulator's true target, so the closed loop runs through the
+    same history, injection and ring-buffer path as a real estimator. A failure
+    here is in the environment or the plumbing, never in an estimator."""
+
+    def __init__(self, adapter):
+        super().__init__()
+        self._adapter = adapter
+
+    def predict(self, _inputs):
+        return self._adapter.estimator_target()
+
+
 def _summary(closed: dict | None, grid: dict) -> dict:
     keys = (
         "death_rate", "episode_length_mean", "rmse", "target_rmse",
@@ -121,7 +134,11 @@ def main(env_cfg, agent_cfg):
         env, base_adapter, teacher_agent, None, "LSTM", 1,
         settle_s=args_cli.grid_settle_s, measure_s=args_cli.grid_measure_s, seed=args_cli.seed,
     )
-    report["results"]["teacher_ground_truth"] = _summary(None, teacher_grid)
+    oracle_closed = evaluate_estimator_closed_loop(
+        env, base_adapter, teacher_agent, _OracleEstimator(base_adapter), "LSTM", 1,
+        args_cli.eval_episodes, args_cli.max_episode_steps, args_cli.seed,
+    )
+    report["results"]["teacher_ground_truth"] = _summary(oracle_closed, teacher_grid)
     print(f"[slope {args_cli.slope}] teacher: {json.dumps(report['results']['teacher_ground_truth'])}", flush=True)
 
     for path in args_cli.estimator_checkpoints:
