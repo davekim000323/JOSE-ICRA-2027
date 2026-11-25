@@ -373,29 +373,39 @@ class G1WalkSteepSlopeEstimatorPlayEnvCfg(G1WalkSteepSlopePlayEnvCfg):
 
 
 def fixed_slope_terrain_cfg(slope: float) -> TerrainGeneratorCfg:
-    """A small terrain whose every tile is a pyramid of exactly ``slope``.
+    """A terrain whose every tile is a pyramid of exactly ``slope``.
 
     Used by ``tools/eval_slope_sweep.py`` to measure estimators and the teacher
     at one slope at a time. Half the tiles are pyramids and half inverted
-    pyramids, so robots walk both up and down.
+    pyramids, so robots walk both up and down. ``slope == 0`` uses the same
+    ``MeshPlaneTerrainCfg`` flat tile as the training terrain.
+
+    The grid is the training terrain's 10 x 20 tiles of 8 m, so the number of
+    robots per tile and the distance to the world border match training. A first
+    version with 4 x 8 tiles put about 8 robots on each tile and degraded both the
+    teacher and the estimators even at slope 0.
     """
-    return TerrainGeneratorCfg(
-        seed=7,
-        size=(8.0, 8.0),
-        border_width=20.0,
-        num_rows=4,
-        num_cols=8,
-        horizontal_scale=0.1,
-        vertical_scale=0.005,
-        slope_threshold=0.75,
-        use_cache=False,
-        curriculum=False,
-        sub_terrains={
+    if slope <= 0.0:
+        sub_terrains = {"flat": terrain_gen.MeshPlaneTerrainCfg(proportion=1.0)}
+    else:
+        sub_terrains = {
             "slope": terrain_gen.HfPyramidSlopedTerrainCfg(
                 proportion=0.5, slope_range=(slope, slope), platform_width=2.0, border_width=0.25
             ),
             "slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
                 proportion=0.5, slope_range=(slope, slope), platform_width=2.0, border_width=0.25
             ),
-        },
+        }
+    return TerrainGeneratorCfg(
+        seed=42,
+        size=(8.0, 8.0),
+        border_width=20.0,
+        num_rows=10,
+        num_cols=20,
+        horizontal_scale=0.1,
+        vertical_scale=0.005,
+        slope_threshold=0.75,
+        use_cache=True,
+        curriculum=False,
+        sub_terrains=sub_terrains,
     )
