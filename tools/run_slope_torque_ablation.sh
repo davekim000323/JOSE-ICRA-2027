@@ -11,12 +11,14 @@
 #   TEACHER=logs/rsl_rl/isaac_g1_ppo_walk_slope_jose_v0/<run>/model_4999.pt \
 #     bash tools/run_slope_torque_ablation.sh            # full run
 #   SMOKE=1 TEACHER=... bash tools/run_slope_torque_ablation.sh   # pipeline check, minutes
+#   TASK=Isaac-G1-PPO-Walk-SteepSlope-Estimator-JOSE-v0 PREFIX=steep SEEDS=42 TEACHER=... bash ...  # steep terrain
 #
 # Compare grid_tilt_error_deg_mean, grid_target_rmse[6:9] and the command
 # tracking error in logs/jose_g1/estimators/slope_*/training.json.
 set -euo pipefail
 : "${TEACHER:?set TEACHER to the slope teacher checkpoint}"
-TASK=Isaac-G1-PPO-Walk-Slope-Estimator-JOSE-v0
+TASK=${TASK:-Isaac-G1-PPO-Walk-Slope-Estimator-JOSE-v0}
+PREFIX=${PREFIX:-slope}
 SEEDS=${SEEDS:-"42 43 44"}
 EXTRA=()
 SUFFIX=""
@@ -34,7 +36,7 @@ declare -A ARMS=(
 )
 for seed in $SEEDS; do
   for arm in enc enc_act enc_tau enc_tau_clean; do
-    run="slope_${arm}_seed${seed}${SUFFIX}"
+    run="${PREFIX}_${arm}_seed${seed}${SUFFIX}"
     echo "=== $run ==="
     # shellcheck disable=SC2086
     python -m jose.train_state_estimator --adapter ppo_walk --task "$TASK" \
