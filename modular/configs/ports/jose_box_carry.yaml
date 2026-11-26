@@ -1,0 +1,9 @@
+# The repository's Isaac Lab box-carry teacher (schema.BOX_CARRY_TERM_LAYOUT).
+# Adds per-hand contact force (units of 50 N) and payload mass (kg).
+name: jose_box_carry
+fields:
+  - {key: base_lin_vel, start: 0, scale: 1.0, history: 5}
+  - {key: base_ang_vel, start: 15, scale: 0.2, history: 5}
+  - {key: projected_gravity, start: 30, scale: 1.0, history: 5}
+  - {key: [contact.left_hand, contact.right_hand], start: 45, scale: 1.0, history: 5}
+  - {key: payload, start: 55, scale: 1.0, history: 5}

@@ -1,0 +1,8 @@
+# The repository's Isaac Lab PPO walk teacher (schema.PPO_WALK_TERM_LAYOUT).
+# Each term keeps a 5-frame history, oldest first, and the full history is
+# overwritten so no ground-truth frame stays visible to the policy.
+name: jose_ppo_walk
+fields:
+  - {key: base_lin_vel, start: 0, scale: 1.0, history: 5}
+  - {key: base_ang_vel, start: 15, scale: 0.2, history: 5}
+  - {key: projected_gravity, start: 30, scale: 1.0, history: 5}

@@ -1,0 +1,22 @@
+# GR00T N1.x style. Named state and action groups, action chunk of 16. Group
+# names follow the GR00T modality-config convention (state.<group>, action.<group>)
+# and must match the checkpoint's own modality.json.
+name: groot_dict
+state:
+  format: dict
+  fields:
+    - {name: state.left_arm, source: joints.q, group: left_arm}
+    - {name: state.right_arm, source: joints.q, group: right_arm}
+    - {name: state.left_hand, source: gripper, gripper: left}
+    - {name: state.right_hand, source: gripper, gripper: right}
+    - {name: state.waist, source: joints.q, group: waist}
+action:
+  format: dict
+  horizon: 16
+  fields:
+    - {kind: joint_targets, key: action.left_arm, group: left_arm}
+    - {kind: joint_targets, key: action.right_arm, group: right_arm}
+    - {kind: gripper, key: action.left_hand, gripper: left}
+    - {kind: gripper, key: action.right_hand, gripper: right}
+    - {kind: joint_targets, key: action.waist, group: waist}
+    - {kind: base_velocity, key: action.base_velocity}

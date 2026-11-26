@@ -1,0 +1,23 @@
+# openpi style (pi0, pi0.5). One flat state vector and one flat action chunk,
+# both zero-padded to 32 dims, chunk length 50. The field layout below is ours,
+# set when the VLA is fine-tuned on this robot. JOSE supplies torso roll and pitch
+# that a fine-tuned humanoid pi0 would otherwise take from the IMU.
+name: openpi_flat
+state:
+  format: flat
+  pad_to: 32
+  fields:
+    - {name: arms_q, source: joints.q, group: arms}
+    - {name: left_gripper, source: gripper, gripper: left}
+    - {name: right_gripper, source: gripper, gripper: right}
+    - {name: torso_roll_pitch, source: jose, field: base_rpy, index: [0, 1]}
+action:
+  format: flat
+  pad_to: 32
+  horizon: 50
+  execute: 25
+  fields:
+    - {kind: joint_targets, group: arms, mode: absolute}
+    - {kind: gripper, gripper: left}
+    - {kind: gripper, gripper: right}
+    - {kind: base_velocity}

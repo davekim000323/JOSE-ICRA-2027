@@ -1,0 +1,42 @@
+# Booster T1, 23 DoF. Joint names and order from booster_gym resources/T1/T1_serial.urdf,
+# which matches the deploy config order (2 head, 4 + 4 arm, waist, 6 + 6 leg).
+# Default pose and torque limits from booster_gym deploy/configs/T1.yaml. The
+# deploy torque limits differ from the URDF effort tags on some leg joints, the
+# deploy values are used. The IMU is read in the Trunk, which is the base link,
+# so the chain is empty. Elbow_Yaw rotates about the forearm and is mapped to the
+# wrist_roll slot, the joint with the same role on Unitree arms. The SDK torque
+# field name is not verified here, check it before hardware use.
+
+name: t1
+joint_names: &id001 [AAHead_yaw, Head_pitch, Left_Shoulder_Pitch, Left_Shoulder_Roll, Left_Elbow_Pitch, Left_Elbow_Yaw,
+  Right_Shoulder_Pitch, Right_Shoulder_Roll, Right_Elbow_Pitch, Right_Elbow_Yaw, Waist, Left_Hip_Pitch, Left_Hip_Roll,
+  Left_Hip_Yaw, Left_Knee_Pitch, Left_Ankle_Pitch, Left_Ankle_Roll, Right_Hip_Pitch, Right_Hip_Roll, Right_Hip_Yaw,
+  Right_Knee_Pitch, Right_Ankle_Pitch, Right_Ankle_Roll]
+control_dt: 0.02
+estimator_joints: all
+slots: {AAHead_yaw: head_yaw, Head_pitch: head_pitch, Waist: waist_yaw, Left_Shoulder_Pitch: left_shoulder_pitch,
+  Left_Shoulder_Roll: left_shoulder_roll, Left_Elbow_Pitch: left_elbow, Left_Elbow_Yaw: left_wrist_roll, Left_Hip_Pitch: left_hip_pitch,
+  Left_Hip_Roll: left_hip_roll, Left_Hip_Yaw: left_hip_yaw, Left_Knee_Pitch: left_knee, Left_Ankle_Pitch: left_ankle_pitch,
+  Left_Ankle_Roll: left_ankle_roll, Right_Shoulder_Pitch: right_shoulder_pitch, Right_Shoulder_Roll: right_shoulder_roll,
+  Right_Elbow_Pitch: right_elbow, Right_Elbow_Yaw: right_wrist_roll, Right_Hip_Pitch: right_hip_pitch, Right_Hip_Roll: right_hip_roll,
+  Right_Hip_Yaw: right_hip_yaw, Right_Knee_Pitch: right_knee, Right_Ankle_Pitch: right_ankle_pitch, Right_Ankle_Roll: right_ankle_roll}
+default_q: [0.0, 0.0, 0.2, -1.35, 0.0, -0.5, 0.2, 1.35, 0.0, 0.5, 0.0, -0.2, 0.0, 0.0, 0.4, -0.25, 0.0, -0.2, 0.0,
+  0.0, 0.4, -0.25, 0.0]
+effort_limit: [7.0, 7.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 30.0, 60.0, 25.0, 30.0, 60.0, 24.0, 15.0,
+  60.0, 25.0, 30.0, 60.0, 24.0, 15.0]
+torque: {source: tau_est}
+imu:
+  frame: pelvis
+  chain: []
+groups:
+  legs: [Left_Hip_Pitch, Left_Hip_Roll, Left_Hip_Yaw, Left_Knee_Pitch, Left_Ankle_Pitch, Left_Ankle_Roll, Right_Hip_Pitch,
+    Right_Hip_Roll, Right_Hip_Yaw, Right_Knee_Pitch, Right_Ankle_Pitch, Right_Ankle_Roll]
+  waist: [Waist]
+  head: [AAHead_yaw, Head_pitch]
+  left_arm: [Left_Shoulder_Pitch, Left_Shoulder_Roll, Left_Elbow_Pitch, Left_Elbow_Yaw]
+  right_arm: [Right_Shoulder_Pitch, Right_Shoulder_Roll, Right_Elbow_Pitch, Right_Elbow_Yaw]
+  arms: [Left_Shoulder_Pitch, Left_Shoulder_Roll, Left_Elbow_Pitch, Left_Elbow_Yaw, Right_Shoulder_Pitch, Right_Shoulder_Roll,
+    Right_Elbow_Pitch, Right_Elbow_Yaw]
+  upper: [AAHead_yaw, Head_pitch, Left_Shoulder_Pitch, Left_Shoulder_Roll, Left_Elbow_Pitch, Left_Elbow_Yaw, Right_Shoulder_Pitch,
+    Right_Shoulder_Roll, Right_Elbow_Pitch, Right_Elbow_Yaw, Waist]
+  body: *id001

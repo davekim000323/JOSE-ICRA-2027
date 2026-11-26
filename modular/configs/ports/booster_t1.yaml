@@ -1,0 +1,8 @@
+# booster_gym deploy/utils/policy.py, Booster T1 walking policy.
+#   obs[0:3] = projected_gravity * normalization.gravity (1.0)
+#   obs[3:6] = base_ang_vel * normalization.ang_vel (1.0)
+# The order is the reverse of unitree_rl_gym, which is why ports are config.
+name: booster_t1
+fields:
+  - {key: projected_gravity, start: 0, scale: 1.0}
+  - {key: base_ang_vel, start: 3, scale: 1.0}
