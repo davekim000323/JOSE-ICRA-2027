@@ -75,3 +75,11 @@ class G1BoxCarryPPORunnerCfg(G1WalkPPORunnerCfg):
         desired_kl=0.01,
         max_grad_norm=1.0,
     )
+
+
+@configclass
+class G1GripperLiftPPORunnerCfg(G1BoxCarryPPORunnerCfg):
+    """Box-carry recipe. 2048 envs x 24 steps, 3000 iterations, sized for about half a day on the 4060."""
+
+    max_iterations = 3000
+    experiment_name = "g1_gripper_lift_jose"

@@ -43,6 +43,6 @@ class G1BoxCarryEstimatorEnv(G1WalkEstimatorEnv):
             "goal_pos_b": box.goal_pos_b(self),
         }
 
-    def box_success(self) -> torch.Tensor:
+    def task_success(self) -> torch.Tensor:
         """1 where the lifted box is within the goal radius, the closed-loop task metric."""
         return box.delivered(self)

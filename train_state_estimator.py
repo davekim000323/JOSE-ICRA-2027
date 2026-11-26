@@ -37,8 +37,8 @@ parser = argparse.ArgumentParser(description="JOSE G1 state-estimator training")
 parser.add_argument("--teacher_checkpoint", "--teacher-checkpoint", dest="teacher_checkpoint", required=True)
 parser.add_argument("--task", default="Isaac-G1-AMP-Walk-JOSE-Direct-v0")
 parser.add_argument("--agent_cfg_entry_point", "--agent", dest="agent", default="skrl_amp_cfg_entry_point")
-parser.add_argument("--adapter", choices=("amp", "ppo_walk", "box_carry"), default="amp")
-parser.add_argument("--joint_preset", "--joint-preset", dest="joint_preset", choices=("all", "legs", "upper"), default="all")
+parser.add_argument("--adapter", choices=("amp", "ppo_walk", "box_carry", "gripper_lift"), default="amp")
+parser.add_argument("--joint_preset", "--joint-preset", dest="joint_preset", choices=("all", "all_gripper", "legs", "upper"), default="all")
 parser.add_argument(
     "--torque_input", "--torque-input", dest="torque_input", action="store_true",
     help="Append the joint-torque (motor-current proxy) channel to the estimator input",

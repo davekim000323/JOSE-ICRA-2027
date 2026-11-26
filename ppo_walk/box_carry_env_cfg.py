@@ -128,7 +128,11 @@ class BoxCarryActionsCfg:
     JointPositionAction = mdp.JointPositionActionCfg(
         asset_name="robot",
         joint_names=[".*"],
-        scale={".*": 0.25, ".*_shoulder_.*": 0.5, ".*_elbow_joint": 0.5, ".*_wrist_.*": 0.5},
+        # Keys must not overlap: Isaac Lab rejects a joint matched by two keys.
+        scale={
+            ".*_hip_.*": 0.25, ".*_knee_joint": 0.25, ".*_ankle_.*": 0.25, "waist_.*": 0.25,
+            ".*_shoulder_.*": 0.5, ".*_elbow_joint": 0.5, ".*_wrist_.*": 0.5,
+        },
         use_default_offset=True,
     )
 

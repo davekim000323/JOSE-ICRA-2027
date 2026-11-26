@@ -295,6 +295,26 @@ python -m jose.train_state_estimator --adapter box_carry --torque-input \
   --task Isaac-G1-Box-Carry-Estimator-JOSE-v0 --teacher-checkpoint "$TEACHER" --run-name box_jose_tau --headless
 ```
 
+## Standing pick and lift with a 1-DOF gripper
+
+`usd/g1_29dof_gripper.urdf` (written by `tools/make_gripper_urdf.py`) replaces the
+right rubber hand with a jaw gripper, one fixed jaw and one prismatic jaw
+(`right_gripper_joint`, 0 to 60 mm, 20 N). `Isaac-G1-Gripper-Lift-JOSE-v0` stands
+the robot at a 0.78 m table, spawns a 45 mm cube of mass U[0.05, 0.5] kg in reach
+of the right hand and asks for it at a target 0.17 to 0.32 m above the pelvis. The
+jaw is a binary action. The JOSE target is 11-D, base state 9-D, grip force and
+payload mass. Use `--adapter gripper_lift --joint-preset all_gripper` so the jaw
+encoder and jaw current reach the estimator.
+
+```bash
+python tools/smoke_gripper_lift.py
+python train_ppo_walk.py --task Isaac-G1-Gripper-Lift-JOSE-v0 --headless --num_envs 64 --max_iterations 5
+python train_ppo_walk.py --task Isaac-G1-Gripper-Lift-JOSE-v0 --headless --max_iterations 3000
+python -m jose.train_state_estimator --adapter gripper_lift --joint-preset all_gripper --torque-input \
+  --task Isaac-G1-Gripper-Lift-Estimator-JOSE-v0 --teacher-checkpoint "$TEACHER" --run-name grip_jose_tau \
+  --max-episode-steps 400 --headless
+```
+
 ## 3. Run the teacher with JOSE in the loop
 
 `play_teacher_with_estimator.py` runs the teacher on JOSE's estimate in place of
