@@ -1,0 +1,15 @@
+# GR00T N1.7 with the SONIC whole-body controller style. The VLA emits a 64-D
+# motion latent per chunk step (horizon 40) that the WBC decodes. The public card
+# lists "29-DoF G1 + projected gravity" as the embodiment state, so JOSE supplies
+# projected gravity to the VLA and, through the IMU message port, to the WBC.
+name: sonic_latent
+state:
+  format: flat
+  fields:
+    - {name: body_q, source: joints.q, group: body}
+    - {name: projected_gravity, source: jose, field: projected_gravity}
+action:
+  format: flat
+  horizon: 40
+  fields:
+    - {kind: latent, dims: 64}

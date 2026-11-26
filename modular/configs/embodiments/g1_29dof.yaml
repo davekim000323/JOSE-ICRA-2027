@@ -1,0 +1,61 @@
+# Unitree G1, 29 DoF. Joint order is schema.G1_JOINT_NAMES, which is also the
+# SDK motor order. Effort limits and default pose follow ppo_walk/g1_asset.py.
+# The IMU sits in the pelvis (unitree_rl_gym deploy config g1.yaml, imu_type pelvis).
+# LowState reports tau_est per motor, used as the torque channel.
+
+name: g1_29dof
+joint_names: [left_hip_pitch_joint, left_hip_roll_joint, left_hip_yaw_joint, left_knee_joint, left_ankle_pitch_joint,
+  left_ankle_roll_joint, right_hip_pitch_joint, right_hip_roll_joint, right_hip_yaw_joint, right_knee_joint, right_ankle_pitch_joint,
+  right_ankle_roll_joint, waist_yaw_joint, waist_roll_joint, waist_pitch_joint, left_shoulder_pitch_joint, left_shoulder_roll_joint,
+  left_shoulder_yaw_joint, left_elbow_joint, left_wrist_roll_joint, left_wrist_pitch_joint, left_wrist_yaw_joint,
+  right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint, right_elbow_joint, right_wrist_roll_joint,
+  right_wrist_pitch_joint, right_wrist_yaw_joint]
+control_dt: 0.02
+estimator_joints: all
+slots: {left_hip_pitch_joint: left_hip_pitch, left_hip_roll_joint: left_hip_roll, left_hip_yaw_joint: left_hip_yaw,
+  left_knee_joint: left_knee, left_ankle_pitch_joint: left_ankle_pitch, left_ankle_roll_joint: left_ankle_roll,
+  right_hip_pitch_joint: right_hip_pitch, right_hip_roll_joint: right_hip_roll, right_hip_yaw_joint: right_hip_yaw,
+  right_knee_joint: right_knee, right_ankle_pitch_joint: right_ankle_pitch, right_ankle_roll_joint: right_ankle_roll,
+  waist_yaw_joint: waist_yaw, waist_roll_joint: waist_roll, waist_pitch_joint: waist_pitch, left_shoulder_pitch_joint: left_shoulder_pitch,
+  left_shoulder_roll_joint: left_shoulder_roll, left_shoulder_yaw_joint: left_shoulder_yaw, left_elbow_joint: left_elbow,
+  left_wrist_roll_joint: left_wrist_roll, left_wrist_pitch_joint: left_wrist_pitch, left_wrist_yaw_joint: left_wrist_yaw,
+  right_shoulder_pitch_joint: right_shoulder_pitch, right_shoulder_roll_joint: right_shoulder_roll, right_shoulder_yaw_joint: right_shoulder_yaw,
+  right_elbow_joint: right_elbow, right_wrist_roll_joint: right_wrist_roll, right_wrist_pitch_joint: right_wrist_pitch,
+  right_wrist_yaw_joint: right_wrist_yaw}
+default_q: {default: 0.0, left_hip_pitch_joint: -0.1, right_hip_pitch_joint: -0.1, left_knee_joint: 0.3, right_knee_joint: 0.3,
+  left_ankle_pitch_joint: -0.2, right_ankle_pitch_joint: -0.2, left_shoulder_pitch_joint: 0.3, right_shoulder_pitch_joint: 0.3,
+  left_shoulder_roll_joint: 0.25, right_shoulder_roll_joint: -0.25, left_elbow_joint: 0.97, right_elbow_joint: 0.97,
+  left_wrist_roll_joint: 0.15, right_wrist_roll_joint: -0.15}
+effort_limit: {left_hip_pitch_joint: 88.0, left_hip_roll_joint: 139.0, left_hip_yaw_joint: 88.0, left_knee_joint: 139.0,
+  left_ankle_pitch_joint: 25.0, left_ankle_roll_joint: 25.0, right_hip_pitch_joint: 88.0, right_hip_roll_joint: 139.0,
+  right_hip_yaw_joint: 88.0, right_knee_joint: 139.0, right_ankle_pitch_joint: 25.0, right_ankle_roll_joint: 25.0,
+  waist_yaw_joint: 88.0, waist_roll_joint: 25.0, waist_pitch_joint: 25.0, left_shoulder_pitch_joint: 25.0, left_shoulder_roll_joint: 25.0,
+  left_shoulder_yaw_joint: 25.0, left_elbow_joint: 25.0, left_wrist_roll_joint: 25.0, left_wrist_pitch_joint: 5.0,
+  left_wrist_yaw_joint: 5.0, right_shoulder_pitch_joint: 25.0, right_shoulder_roll_joint: 25.0, right_shoulder_yaw_joint: 25.0,
+  right_elbow_joint: 25.0, right_wrist_roll_joint: 25.0, right_wrist_pitch_joint: 5.0, right_wrist_yaw_joint: 5.0}
+torque: {source: tau_est}
+imu:
+  frame: pelvis
+  chain: []
+groups:
+  legs: [left_hip_pitch_joint, left_hip_roll_joint, left_hip_yaw_joint, left_knee_joint, left_ankle_pitch_joint,
+    left_ankle_roll_joint, right_hip_pitch_joint, right_hip_roll_joint, right_hip_yaw_joint, right_knee_joint, right_ankle_pitch_joint,
+    right_ankle_roll_joint]
+  waist: [waist_yaw_joint, waist_roll_joint, waist_pitch_joint]
+  left_arm: [left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint, left_elbow_joint, left_wrist_roll_joint,
+    left_wrist_pitch_joint, left_wrist_yaw_joint]
+  right_arm: [right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint, right_elbow_joint,
+    right_wrist_roll_joint, right_wrist_pitch_joint, right_wrist_yaw_joint]
+  arms: [left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint, left_elbow_joint, left_wrist_roll_joint,
+    left_wrist_pitch_joint, left_wrist_yaw_joint, right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint,
+    right_elbow_joint, right_wrist_roll_joint, right_wrist_pitch_joint, right_wrist_yaw_joint]
+  upper: [waist_yaw_joint, waist_roll_joint, waist_pitch_joint, left_shoulder_pitch_joint, left_shoulder_roll_joint,
+    left_shoulder_yaw_joint, left_elbow_joint, left_wrist_roll_joint, left_wrist_pitch_joint, left_wrist_yaw_joint,
+    right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint, right_elbow_joint, right_wrist_roll_joint,
+    right_wrist_pitch_joint, right_wrist_yaw_joint]
+  body: [left_hip_pitch_joint, left_hip_roll_joint, left_hip_yaw_joint, left_knee_joint, left_ankle_pitch_joint,
+    left_ankle_roll_joint, right_hip_pitch_joint, right_hip_roll_joint, right_hip_yaw_joint, right_knee_joint, right_ankle_pitch_joint,
+    right_ankle_roll_joint, waist_yaw_joint, waist_roll_joint, waist_pitch_joint, left_shoulder_pitch_joint, left_shoulder_roll_joint,
+    left_shoulder_yaw_joint, left_elbow_joint, left_wrist_roll_joint, left_wrist_pitch_joint, left_wrist_yaw_joint,
+    right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint, right_elbow_joint, right_wrist_roll_joint,
+    right_wrist_pitch_joint, right_wrist_yaw_joint]

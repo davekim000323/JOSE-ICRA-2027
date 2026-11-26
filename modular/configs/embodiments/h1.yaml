@@ -1,0 +1,46 @@
+# Unitree H1, 19 DoF. Joint names, order and effort limits from unitree_ros
+# robots/h1_description/urdf/h1.urdf. The IMU sits in the torso above torso_joint
+# (unitree_rl_gym deploy, "h1 and h1_2 imu is on the torso"), so the IMU chain
+# is torso_joint about z. Default pose follows unitree_rl_gym h1 config, verify
+# against the policy being deployed.
+
+name: h1
+joint_names: [left_hip_yaw_joint, left_hip_roll_joint, left_hip_pitch_joint, left_knee_joint, left_ankle_joint,
+  right_hip_yaw_joint, right_hip_roll_joint, right_hip_pitch_joint, right_knee_joint, right_ankle_joint, torso_joint,
+  left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint, left_elbow_joint, right_shoulder_pitch_joint,
+  right_shoulder_roll_joint, right_shoulder_yaw_joint, right_elbow_joint]
+control_dt: 0.02
+estimator_joints: all
+slots: {left_hip_yaw_joint: left_hip_yaw, left_hip_roll_joint: left_hip_roll, left_hip_pitch_joint: left_hip_pitch,
+  left_knee_joint: left_knee, left_ankle_joint: left_ankle_pitch, right_hip_yaw_joint: right_hip_yaw, right_hip_roll_joint: right_hip_roll,
+  right_hip_pitch_joint: right_hip_pitch, right_knee_joint: right_knee, right_ankle_joint: right_ankle_pitch, torso_joint: waist_yaw,
+  left_shoulder_pitch_joint: left_shoulder_pitch, left_shoulder_roll_joint: left_shoulder_roll, left_shoulder_yaw_joint: left_shoulder_yaw,
+  left_elbow_joint: left_elbow, right_shoulder_pitch_joint: right_shoulder_pitch, right_shoulder_roll_joint: right_shoulder_roll,
+  right_shoulder_yaw_joint: right_shoulder_yaw, right_elbow_joint: right_elbow}
+default_q: {default: 0.0, left_hip_pitch_joint: -0.1, right_hip_pitch_joint: -0.1, left_knee_joint: 0.3, right_knee_joint: 0.3,
+  left_ankle_joint: -0.2, right_ankle_joint: -0.2}
+effort_limit: {left_hip_yaw_joint: 200.0, left_hip_roll_joint: 200.0, left_hip_pitch_joint: 200.0, left_knee_joint: 300.0,
+  left_ankle_joint: 40.0, right_hip_yaw_joint: 200.0, right_hip_roll_joint: 200.0, right_hip_pitch_joint: 200.0,
+  right_knee_joint: 300.0, right_ankle_joint: 40.0, torso_joint: 200.0, left_shoulder_pitch_joint: 40.0, left_shoulder_roll_joint: 40.0,
+  left_shoulder_yaw_joint: 18.0, left_elbow_joint: 18.0, right_shoulder_pitch_joint: 40.0, right_shoulder_roll_joint: 40.0,
+  right_shoulder_yaw_joint: 18.0, right_elbow_joint: 18.0}
+torque: {source: tau_est}
+imu:
+  frame: torso
+  chain:
+  - joint: torso_joint
+    axis: [0.0, 0.0, 1.0]
+groups:
+  legs: [left_hip_yaw_joint, left_hip_roll_joint, left_hip_pitch_joint, left_knee_joint, left_ankle_joint, right_hip_yaw_joint,
+    right_hip_roll_joint, right_hip_pitch_joint, right_knee_joint, right_ankle_joint]
+  waist: [torso_joint]
+  left_arm: [left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint, left_elbow_joint]
+  right_arm: [right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint, right_elbow_joint]
+  arms: [left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint, left_elbow_joint, right_shoulder_pitch_joint,
+    right_shoulder_roll_joint, right_shoulder_yaw_joint, right_elbow_joint]
+  upper: [torso_joint, left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint, left_elbow_joint,
+    right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint, right_elbow_joint]
+  body: [left_hip_yaw_joint, left_hip_roll_joint, left_hip_pitch_joint, left_knee_joint, left_ankle_joint, right_hip_yaw_joint,
+    right_hip_roll_joint, right_hip_pitch_joint, right_knee_joint, right_ankle_joint, torso_joint, left_shoulder_pitch_joint,
+    left_shoulder_roll_joint, left_shoulder_yaw_joint, left_elbow_joint, right_shoulder_pitch_joint, right_shoulder_roll_joint,
+    right_shoulder_yaw_joint, right_elbow_joint]

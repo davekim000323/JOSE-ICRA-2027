@@ -1,0 +1,23 @@
+# OpenHLM style (arXiv 2606.22174), G1 with two parallel grippers. 34-D state and
+# action. Root roll, root pitch, yaw rate, 29 joint targets and 2 grippers, chunk
+# of 50 at 30 Hz with up to 25 executed. Root roll and pitch are IMU terms in the
+# original, here they come from JOSE. The paper is read from text only.
+name: openhlm_body
+state:
+  format: flat
+  fields:
+    - {name: root_roll_pitch, source: jose, field: base_rpy, index: [0, 1]}
+    - {name: yaw_rate, source: jose, field: base_ang_vel, index: [2]}
+    - {name: body_q, source: joints.q, group: body}
+    - {name: left_gripper, source: gripper, gripper: left}
+    - {name: right_gripper, source: gripper, gripper: right}
+action:
+  format: flat
+  horizon: 50
+  execute: 25
+  fields:
+    - {kind: skip, dims: 2}          # root roll and pitch targets, realized by the WBC
+    - {kind: skip, dims: 1}          # yaw rate, realized by the WBC
+    - {kind: joint_targets, group: body}
+    - {kind: gripper, gripper: left}
+    - {kind: gripper, gripper: right}

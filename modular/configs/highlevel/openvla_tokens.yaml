@@ -1,0 +1,14 @@
+# OpenVLA style. Seven discrete tokens per step, 256 uniform bins over [-1, 1],
+# then un-normalized per dimension (low and high play the role of the 1st and
+# 99th percentile statistics of the fine-tuning data). End-effector delta for the
+# right arm plus gripper. IK is the low-level controller's job. No state input.
+name: openvla_tokens
+state:
+  format: none
+action:
+  format: tokens
+  bins: 256
+  horizon: 1
+  fields:
+    - {kind: ee_delta, arm: right, low: [-0.02, -0.02, -0.02, -0.1, -0.1, -0.1], high: [0.02, 0.02, 0.02, 0.1, 0.1, 0.1]}
+    - {kind: gripper, gripper: right, low: [0.0], high: [1.0]}

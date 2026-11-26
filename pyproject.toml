@@ -19,7 +19,7 @@ packages = [
   "jose", "jose.agents", "jose.distillation", "jose.estimator",
   "jose.motions", "jose.tools",
   "jose.ppo_walk", "jose.ppo_walk.agents", "jose.ppo_walk.mdp",
-  "jose.ppo_walk.utils",
+  "jose.ppo_walk.utils", "jose.modular",
 ]
 
 [tool.setuptools.package-dir]
@@ -33,6 +33,7 @@ jose = "."
 "jose.ppo_walk.agents" = "ppo_walk/agents"
 "jose.ppo_walk.mdp" = "ppo_walk/mdp"
 "jose.ppo_walk.utils" = "ppo_walk/utils"
+"jose.modular" = "modular"
 
 [tool.setuptools.package-data]
 jose = [
@@ -40,3 +41,4 @@ jose = [
   "motions/*.npz",
   "usd/**/*",
 ]
+"jose.modular" = ["configs/*/*.yaml"]

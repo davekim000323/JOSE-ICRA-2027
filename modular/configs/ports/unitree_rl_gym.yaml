@@ -1,0 +1,9 @@
+# unitree_rl_gym deploy/deploy_real/deploy_real.py, G1, H1 and H1-2 walking policies.
+#   obs[0:3] = gyroscope * ang_vel_scale (0.25), obs[3:6] = gravity_orientation
+# Both terms are in the pelvis frame. On H1 and H1-2 the deploy script rotates the
+# torso IMU into the pelvis with transform_imu_data, so this port writes the
+# pelvis-frame estimate directly and that step is skipped.
+name: unitree_rl_gym
+fields:
+  - {key: base_ang_vel, start: 0, scale: 0.25}
+  - {key: projected_gravity, start: 3, scale: 1.0}

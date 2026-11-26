@@ -1,0 +1,15 @@
+# WholeBodyVLA style (arXiv 2512.11047). The decoder outputs upper-body joint
+# angles and a locomotion command of ternary flags (s_x, s_y, s_psi) plus stance
+# height. Flags are mapped to velocities with a fixed speed per axis.
+name: wholebodyvla_flags
+state:
+  format: flat
+  fields:
+    - {name: upper_q, source: joints.q, group: upper}
+action:
+  format: flat
+  horizon: 1
+  fields:
+    - {kind: joint_targets, group: upper}
+    - {kind: loco_flags, speed: [0.5, 0.3, 0.6]}
+    - {kind: base_height}

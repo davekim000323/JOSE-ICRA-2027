@@ -1,0 +1,23 @@
+# Psi0 style (arXiv 2603.12263), adapted from Dex3-1 hands to 1-DoF grippers.
+# The released Psi0 action is 36-D with 14 hand joints. Here the hands are two
+# gripper closures, so the layout is 24-D. Torso roll, pitch, yaw are in the VLA
+# state in the original, here JOSE supplies roll and pitch and integrated yaw.
+name: psi0_gripper
+state:
+  format: flat
+  fields:
+    - {name: grippers_left, source: gripper, gripper: left}
+    - {name: grippers_right, source: gripper, gripper: right}
+    - {name: arms_q, source: joints.q, group: arms}
+    - {name: torso_rpy, source: jose, field: base_rpy}
+action:
+  format: flat
+  horizon: 1
+  fields:
+    - {kind: gripper, gripper: left}
+    - {kind: gripper, gripper: right}
+    - {kind: joint_targets, group: arms}
+    - {kind: torso_rpy}
+    - {kind: base_height}
+    - {kind: base_velocity}
+    - {kind: skip, dims: 1}          # p_yaw, a target heading
