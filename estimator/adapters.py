@@ -9,6 +9,14 @@ import torch
 
 from ..schema import (
     AMP_OBSERVATION_SCHEMA,
+    BOX_CARRY_HISTORY_LENGTH,
+    BOX_CARRY_OBSERVATION_SCHEMA,
+    box_carry_history_target_indices,
+    box_carry_target_scales,
+    GRIPPER_LIFT_HISTORY_LENGTH,
+    GRIPPER_LIFT_OBSERVATION_SCHEMA,
+    gripper_lift_history_target_indices,
+    gripper_lift_target_scales,
     G1_KEY_BODY_NAMES,
     PPO_WALK_OBSERVATION_SCHEMA,
     ObservationSchema,
@@ -236,6 +244,68 @@ class PpoWalkPolicyAdapter(PolicyAdapter):
         return inject_observation_estimate(observations, self._push(estimate), self._history_indices)
 
 
+class _HistoryTaskAdapter(PpoWalkPolicyAdapter):
+    """rsl-rl manipulation teacher with a task-specific estimator target.
+
+    Same plumbing as the walk adapter. Subclasses name the schema, the history
+    length and two functions giving the injection indices and per-column scales.
+    Injection overwrites every history frame of every estimated term.
+    """
+
+    history_length: int
+    _indices_fn = staticmethod(lambda: ())
+    _scales_fn = staticmethod(lambda: ())
+
+    def __init__(self, env, joint_preset: str = "all", use_imu: bool = False, **input_options):
+        super().__init__(env, joint_preset, use_imu, **input_options)
+        self._history_indices = type(self)._indices_fn()
+
+    def _scaled(self, estimate: torch.Tensor) -> torch.Tensor:
+        if self._scales is None:
+            self._scales = torch.tensor(type(self)._scales_fn(), device=estimate.device, dtype=estimate.dtype)
+        return estimate * self._scales
+
+    def _push(self, estimate: torch.Tensor) -> torch.Tensor:
+        scaled = self._scaled(estimate)
+        if self._ring is None or self._ring.shape[0] != scaled.shape[0]:
+            self._ring = scaled.unsqueeze(1).repeat(1, self.history_length, 1)
+        else:
+            self._ring = torch.roll(self._ring, -1, dims=1)
+            self._ring[:, -1] = scaled
+            just_reset = self.core_env.episode_length_buf == 0
+            if bool(just_reset.any()):
+                self._ring[just_reset] = scaled[just_reset].unsqueeze(1)
+        return self._ring.reshape(scaled.shape[0], -1)
+
+
+class BoxCarryPolicyAdapter(_HistoryTaskAdapter):
+    """Bimanual box carry. 12-D target, base state plus per-hand contact force and payload."""
+
+    schema = BOX_CARRY_OBSERVATION_SCHEMA
+    history_length = BOX_CARRY_HISTORY_LENGTH
+    _indices_fn = staticmethod(box_carry_history_target_indices)
+    _scales_fn = staticmethod(box_carry_target_scales)
+
+    def name(self) -> str:
+        return "box_carry"
+
+
+class GripperLiftPolicyAdapter(_HistoryTaskAdapter):
+    """1-DOF gripper pick and lift. 11-D target, base state plus grip force and payload.
+
+    Use ``--joint-preset all_gripper`` so the jaw encoder (and, with
+    ``--torque-input``, the jaw motor current) enters the estimator.
+    """
+
+    schema = GRIPPER_LIFT_OBSERVATION_SCHEMA
+    history_length = GRIPPER_LIFT_HISTORY_LENGTH
+    _indices_fn = staticmethod(gripper_lift_history_target_indices)
+    _scales_fn = staticmethod(gripper_lift_target_scales)
+
+    def name(self) -> str:
+        return "gripper_lift"
+
+
 def make_policy_adapter(
     kind: str,
     env,
@@ -267,4 +337,8 @@ def make_policy_adapter(
     # commands and logged run metadata keep working.
     if kind in ("ppo_walk", "ppo"):
         return PpoWalkPolicyAdapter(env, joint_preset, use_imu, **options)
-    raise ValueError(f"Unknown policy adapter {kind!r}; choose amp or ppo_walk")
+    if kind == "box_carry":
+        return BoxCarryPolicyAdapter(env, joint_preset, use_imu, **options)
+    if kind == "gripper_lift":
+        return GripperLiftPolicyAdapter(env, joint_preset, use_imu, **options)
+    raise ValueError(f"Unknown policy adapter {kind!r}; choose amp, ppo_walk, box_carry or gripper_lift")

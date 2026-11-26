@@ -198,3 +198,41 @@ G1_29DOF_CFG = G1ArticulationCfg(
         "right_wrist_yaw_joint",
     ],
 )
+
+
+# ---------------------------------------------------------------------------
+# G1 29-DOF plus a 1-DOF jaw gripper on the right wrist (tools/make_gripper_urdf.py)
+# ---------------------------------------------------------------------------
+
+G1_GRIPPER_URDF = os.path.join(_JOSE_ROOT, "usd", "g1_29dof_gripper.urdf")
+GRIPPER_JOINT = "right_gripper_joint"
+#: Prismatic travel, m. 0 is open (68 mm jaw gap), the close command overshoots any
+#: object so the drive saturates at its effort limit and the grip force is 20 N.
+GRIPPER_OPEN = 0.0
+GRIPPER_CLOSE = 0.045
+
+G1_GRIPPER_CFG = G1_29DOF_CFG.replace(
+    spawn=G1UrdfFileCfg(
+        asset_path=G1_GRIPPER_URDF,
+        # Base and fixed jaw merge into right_wrist_yaw_link, the moving jaw stays
+        # its own body so its contact force can be read alone.
+        merge_fixed_joints=True,
+    ),
+    actuators={
+        **G1_29DOF_CFG.actuators,
+        "gripper": ImplicitActuatorCfg(
+            joint_names_expr=[GRIPPER_JOINT],
+            effort_limit_sim=20.0,
+            velocity_limit_sim=0.2,
+            stiffness=1000.0,
+            damping=20.0,
+            armature=0.001,
+        ),
+    },
+    # A new init_state, not a mutation: ``replace`` is shallow and the walk asset
+    # would otherwise inherit a joint it does not have.
+    init_state=G1_29DOF_CFG.init_state.replace(
+        joint_pos={**G1_29DOF_CFG.init_state.joint_pos, GRIPPER_JOINT: GRIPPER_OPEN}
+    ),
+    joint_sdk_names=[*G1_29DOF_CFG.joint_sdk_names, GRIPPER_JOINT],
+)

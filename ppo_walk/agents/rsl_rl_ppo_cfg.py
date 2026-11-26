@@ -48,3 +48,38 @@ class G1WalkPPORunnerCfg(RslRlOnPolicyRunnerCfg):
 @configclass
 class G1WalkEstimatorPPORunnerCfg(G1WalkPPORunnerCfg):
     """Identical training recipe, used for the estimator-compatible task variant."""
+
+
+@configclass
+class G1BoxCarryPPORunnerCfg(G1WalkPPORunnerCfg):
+    """Walk recipe with a longer budget and a lower entropy bonus.
+
+    Squeezing needs both arms to push inward together, which a high-entropy
+    policy keeps breaking. 0.005 is the Isaac Lab manipulation default.
+    """
+
+    max_iterations = 8000
+    experiment_name = "g1_box_carry_jose"
+
+    algorithm = RslRlPpoAlgorithmCfg(
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.005,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+    )
+
+
+@configclass
+class G1GripperLiftPPORunnerCfg(G1BoxCarryPPORunnerCfg):
+    """Box-carry recipe. 2048 envs x 24 steps, 3000 iterations, sized for about half a day on the 4060."""
+
+    max_iterations = 3000
+    experiment_name = "g1_gripper_lift_jose"

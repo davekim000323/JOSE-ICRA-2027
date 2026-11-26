@@ -49,8 +49,12 @@ G1_LEG_JOINT_NAMES = tuple(
 )
 G1_UPPER_JOINT_NAMES = tuple(name for name in G1_JOINT_NAMES if name not in G1_LEG_JOINT_NAMES)
 
+#: The prismatic jaw joint of the gripper variant (``usd/g1_29dof_gripper.urdf``).
+G1_GRIPPER_JOINT_NAME = "right_gripper_joint"
+
 JOINT_PRESETS: Mapping[str, tuple[str, ...]] = {
     "all": G1_JOINT_NAMES,
+    "all_gripper": (*G1_JOINT_NAMES, G1_GRIPPER_JOINT_NAME),
     "legs": G1_LEG_JOINT_NAMES,
     "upper": G1_UPPER_JOINT_NAMES,
 }
@@ -224,3 +228,154 @@ def ppo_walk_target_scales() -> tuple[float, ...]:
     for name in PPO_WALK_ESTIMATOR_TERMS:
         scales.extend([layout[name]] * 3)
     return tuple(scales)
+
+
+# Manager-based G1 box-carry layout (``ppo_walk/box_carry_env_cfg.py``). Same
+# per-term history convention as the walk task. The first five terms are the
+# privileged state JOSE reconstructs, so they sit in front and stay contiguous.
+#
+#   base_lin_vel(5x3) base_ang_vel(5x3) projected_gravity(5x3)
+#   hand_contact_force(5x2) payload_mass(5x1)
+#   box_pos_b(5x3) box_axis_b(5x3) goal_pos_b(5x3)
+#   joint_pos_rel(5x29) joint_vel_rel(5x29) last_action(5x29)       = 540
+BOX_CARRY_HISTORY_LENGTH = 5
+_BOX_CARRY_TERMS = (
+    # (name, per-frame dim, observation scale applied by the manager)
+    ("base_lin_vel", 3, 1.0),
+    ("base_ang_vel", 3, 0.2),
+    ("projected_gravity", 3, 1.0),
+    ("hand_contact_force", 2, 1.0),
+    ("payload_mass", 1, 1.0),
+    ("box_pos_b", 3, 1.0),
+    ("box_axis_b", 3, 1.0),
+    ("goal_pos_b", 3, 1.0),
+    ("joint_pos_rel", 29, 1.0),
+    ("joint_vel_rel", 29, 0.05),
+    ("last_action", 29, 1.0),
+)
+
+
+def _block_layout(terms, history):
+    layout, start = [], 0
+    for name, dim, scale in terms:
+        layout.append((name, dim, start, scale))
+        start += dim * history
+    return tuple(layout), start
+
+
+BOX_CARRY_TERM_LAYOUT, BOX_CARRY_POLICY_DIM = _block_layout(_BOX_CARRY_TERMS, BOX_CARRY_HISTORY_LENGTH)
+BOX_CARRY_ESTIMATOR_TERMS = (
+    "base_lin_vel", "base_ang_vel", "projected_gravity", "hand_contact_force", "payload_mass",
+)
+#: Contact force is in units of 50 N per hand, payload in kg (see box_carry_mdp).
+BOX_CARRY_TARGET_NAMES = (
+    "base_lin_vel_x", "base_lin_vel_y", "base_lin_vel_z",
+    "base_ang_vel_x", "base_ang_vel_y", "base_ang_vel_z",
+    "projected_gravity_x", "projected_gravity_y", "projected_gravity_z",
+    "left_hand_contact_force", "right_hand_contact_force",
+    "payload_mass",
+)
+
+
+def _newest_frame_indices(layout, terms, history):
+    table = {name: (dim, start) for name, dim, start, _ in layout}
+    out: list[int] = []
+    for name in terms:
+        dim, start = table[name]
+        offset = start + (history - 1) * dim
+        out.extend(range(offset, offset + dim))
+    return tuple(out)
+
+
+def _all_frame_indices(layout, terms, history):
+    """Every history slot of ``terms``, frame by frame, newest frame last."""
+    table = {name: (dim, start) for name, dim, start, _ in layout}
+    out: list[int] = []
+    for frame in range(history):
+        for name in terms:
+            dim, start = table[name]
+            offset = start + frame * dim
+            out.extend(range(offset, offset + dim))
+    return tuple(out)
+
+
+_BOX_LAYOUT_TABLE = {name: (dim, start) for name, dim, start, _ in BOX_CARRY_TERM_LAYOUT}
+
+BOX_CARRY_OBSERVATION_SCHEMA = ObservationSchema(
+    name=f"g1_box_carry_{BOX_CARRY_POLICY_DIM}",
+    policy_dim=BOX_CARRY_POLICY_DIM,
+    joint_position_start=_BOX_LAYOUT_TABLE["joint_pos_rel"][1] + 4 * 29,
+    joint_velocity_start=_BOX_LAYOUT_TABLE["joint_vel_rel"][1] + 4 * 29,
+    estimator_target_indices=_newest_frame_indices(
+        BOX_CARRY_TERM_LAYOUT, BOX_CARRY_ESTIMATOR_TERMS, BOX_CARRY_HISTORY_LENGTH
+    ),
+    estimator_target_names=BOX_CARRY_TARGET_NAMES,
+)
+
+
+def box_carry_history_target_indices() -> tuple[int, ...]:
+    return _all_frame_indices(BOX_CARRY_TERM_LAYOUT, BOX_CARRY_ESTIMATOR_TERMS, BOX_CARRY_HISTORY_LENGTH)
+
+
+def box_carry_target_scales() -> tuple[float, ...]:
+    table = {name: (dim, scale) for name, dim, _, scale in BOX_CARRY_TERM_LAYOUT}
+    scales: list[float] = []
+    for name in BOX_CARRY_ESTIMATOR_TERMS:
+        dim, scale = table[name]
+        scales.extend([scale] * dim)
+    return tuple(scales)
+
+
+# Manager-based G1 gripper lift layout (``ppo_walk/gripper_lift_env_cfg.py``),
+# 29 body joints plus the 1-DOF jaw, so every joint term is 30 wide.
+#
+#   base_lin_vel(5x3) base_ang_vel(5x3) projected_gravity(5x3)
+#   grip_force(5x1) payload_mass(5x1)
+#   object_pos_b(5x3) object_axis_b(5x3) target_pos_b(5x3)
+#   joint_pos_rel(5x30) joint_vel_rel(5x30) last_action(5x30)       = 550
+GRIPPER_LIFT_HISTORY_LENGTH = 5
+_GRIPPER_LIFT_TERMS = (
+    ("base_lin_vel", 3, 1.0),
+    ("base_ang_vel", 3, 0.2),
+    ("projected_gravity", 3, 1.0),
+    ("grip_force", 1, 1.0),
+    ("payload_mass", 1, 1.0),
+    ("object_pos_b", 3, 1.0),
+    ("object_axis_b", 3, 1.0),
+    ("target_pos_b", 3, 1.0),
+    ("joint_pos_rel", 30, 1.0),
+    ("joint_vel_rel", 30, 0.05),
+    ("last_action", 30, 1.0),
+)
+GRIPPER_LIFT_TERM_LAYOUT, GRIPPER_LIFT_POLICY_DIM = _block_layout(_GRIPPER_LIFT_TERMS, GRIPPER_LIFT_HISTORY_LENGTH)
+GRIPPER_LIFT_ESTIMATOR_TERMS = ("base_lin_vel", "base_ang_vel", "projected_gravity", "grip_force", "payload_mass")
+#: Grip force in units of the 20 N jaw effort limit, payload in kg.
+GRIPPER_LIFT_TARGET_NAMES = (
+    "base_lin_vel_x", "base_lin_vel_y", "base_lin_vel_z",
+    "base_ang_vel_x", "base_ang_vel_y", "base_ang_vel_z",
+    "projected_gravity_x", "projected_gravity_y", "projected_gravity_z",
+    "grip_force",
+    "payload_mass",
+)
+_GRIP_TABLE = {name: (dim, start) for name, dim, start, _ in GRIPPER_LIFT_TERM_LAYOUT}
+
+GRIPPER_LIFT_OBSERVATION_SCHEMA = ObservationSchema(
+    name=f"g1_gripper_lift_{GRIPPER_LIFT_POLICY_DIM}",
+    policy_dim=GRIPPER_LIFT_POLICY_DIM,
+    action_dim=30,
+    joint_position_start=_GRIP_TABLE["joint_pos_rel"][1] + 4 * 30,
+    joint_velocity_start=_GRIP_TABLE["joint_vel_rel"][1] + 4 * 30,
+    estimator_target_indices=_newest_frame_indices(
+        GRIPPER_LIFT_TERM_LAYOUT, GRIPPER_LIFT_ESTIMATOR_TERMS, GRIPPER_LIFT_HISTORY_LENGTH
+    ),
+    estimator_target_names=GRIPPER_LIFT_TARGET_NAMES,
+)
+
+
+def gripper_lift_history_target_indices() -> tuple[int, ...]:
+    return _all_frame_indices(GRIPPER_LIFT_TERM_LAYOUT, GRIPPER_LIFT_ESTIMATOR_TERMS, GRIPPER_LIFT_HISTORY_LENGTH)
+
+
+def gripper_lift_target_scales() -> tuple[float, ...]:
+    table = {name: (dim, scale) for name, dim, _, scale in GRIPPER_LIFT_TERM_LAYOUT}
+    return tuple(s for name in GRIPPER_LIFT_ESTIMATOR_TERMS for s in [table[name][1]] * table[name][0])

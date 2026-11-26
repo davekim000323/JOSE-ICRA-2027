@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 #: Adapters whose teacher is trained with rsl-rl rather than SKRL.
-RSL_RL_ADAPTERS = frozenset({"ppo_walk"})
+RSL_RL_ADAPTERS = frozenset({"ppo_walk", "box_carry", "gripper_lift"})
 
 #: Hydra entry point holding the runner config for each stack.
 SKRL_AGENT_ENTRY_POINT = "skrl_amp_cfg_entry_point"

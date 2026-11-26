@@ -272,6 +272,49 @@ TEACHER=<slope teacher .pt> bash tools/run_slope_torque_ablation.sh           # 
 
 `python tools/smoke_torque_input.py` checks the input path on CPU without Isaac Lab.
 
+## Bimanual box carry (joint encoders plus torque)
+
+`Isaac-G1-Box-Carry-JOSE-v0` spawns a fixed-size box (0.28 x 0.28 x 0.24 m, mass
+U[0.5, 3.0] kg) on a 0.70 m pedestal. The policy is given the box pose and a goal
+position in the pelvis frame. It walks to the box, squeezes it between both palms
+(the 29-DOF asset has no gripper), lifts it, carries it to the goal and holds it
+there. A per-env curriculum widens the box distance (0.4 to 2.5 m), bearing (0 to
+90 deg) and goal distance (0.3 to 3.0 m) on success and narrows it on a drop or fall.
+
+The teacher additionally reads per-hand box contact force and payload mass, so the
+JOSE target is 12-D (base state 9-D, contact 2-D, payload 1-D). Train JOSE on the
+`-Estimator-` twin with `--adapter box_carry --torque-input`. Closed-loop evaluation
+reports `delivery_rate` and `delivered_time_frac`, and DAgger keeps the round with
+the highest delivery rate.
+
+```bash
+python tools/smoke_box_carry.py                                   # CPU check, no Isaac Lab
+python train_ppo_walk.py --task Isaac-G1-Box-Carry-JOSE-v0 --headless --num_envs 64 --max_iterations 5
+python train_ppo_walk.py --task Isaac-G1-Box-Carry-JOSE-v0 --headless --max_iterations 8000
+python -m jose.train_state_estimator --adapter box_carry --torque-input \
+  --task Isaac-G1-Box-Carry-Estimator-JOSE-v0 --teacher-checkpoint "$TEACHER" --run-name box_jose_tau --headless
+```
+
+## Standing pick and lift with a 1-DOF gripper
+
+`usd/g1_29dof_gripper.urdf` (written by `tools/make_gripper_urdf.py`) replaces the
+right rubber hand with a jaw gripper, one fixed jaw and one prismatic jaw
+(`right_gripper_joint`, 0 to 60 mm, 20 N). `Isaac-G1-Gripper-Lift-JOSE-v0` stands
+the robot at a 0.78 m table, spawns a 45 mm cube of mass U[0.05, 0.5] kg in reach
+of the right hand and asks for it at a target 0.17 to 0.32 m above the pelvis. The
+jaw is a binary action. The JOSE target is 11-D, base state 9-D, grip force and
+payload mass. Use `--adapter gripper_lift --joint-preset all_gripper` so the jaw
+encoder and jaw current reach the estimator.
+
+```bash
+python tools/smoke_gripper_lift.py
+python train_ppo_walk.py --task Isaac-G1-Gripper-Lift-JOSE-v0 --headless --num_envs 64 --max_iterations 5
+python train_ppo_walk.py --task Isaac-G1-Gripper-Lift-JOSE-v0 --headless --max_iterations 3000
+python -m jose.train_state_estimator --adapter gripper_lift --joint-preset all_gripper --torque-input \
+  --task Isaac-G1-Gripper-Lift-Estimator-JOSE-v0 --teacher-checkpoint "$TEACHER" --run-name grip_jose_tau \
+  --max-episode-steps 400 --headless
+```
+
 ## 3. Run the teacher with JOSE in the loop
 
 `play_teacher_with_estimator.py` runs the teacher on JOSE's estimate in place of
