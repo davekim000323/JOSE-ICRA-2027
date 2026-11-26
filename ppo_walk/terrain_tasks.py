@@ -53,3 +53,26 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{_PKG}.ppo_walk.agents.rsl_rl_ppo_cfg:G1WalkEstimatorPPORunnerCfg",
     },
 )
+
+
+gym.register(
+    id="Isaac-G1-PPO-Walk-SteepSlope-JOSE-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{_PKG}.ppo_walk.terrain_env_cfg:G1WalkSteepSlopeEnvCfg",
+        "play_env_cfg_entry_point": f"{_PKG}.ppo_walk.terrain_env_cfg:G1WalkSteepSlopePlayEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{_PKG}.ppo_walk.agents.rsl_rl_ppo_cfg:G1WalkPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Isaac-G1-PPO-Walk-SteepSlope-Estimator-JOSE-v0",
+    entry_point=f"{_PKG}.ppo_walk.walk_estimator_env:G1WalkEstimatorEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{_PKG}.ppo_walk.terrain_env_cfg:G1WalkSteepSlopeEstimatorEnvCfg",
+        "play_env_cfg_entry_point": f"{_PKG}.ppo_walk.terrain_env_cfg:G1WalkSteepSlopeEstimatorPlayEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{_PKG}.ppo_walk.agents.rsl_rl_ppo_cfg:G1WalkEstimatorPPORunnerCfg",
+    },
+)

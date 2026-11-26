@@ -39,6 +39,19 @@ parser.add_argument("--task", default="Isaac-G1-AMP-Walk-JOSE-Direct-v0")
 parser.add_argument("--agent_cfg_entry_point", "--agent", dest="agent", default="skrl_amp_cfg_entry_point")
 parser.add_argument("--adapter", choices=("amp", "ppo_walk"), default="amp")
 parser.add_argument("--joint_preset", "--joint-preset", dest="joint_preset", choices=("all", "legs", "upper"), default="all")
+parser.add_argument(
+    "--torque_input", "--torque-input", dest="torque_input", action="store_true",
+    help="Append the joint-torque (motor-current proxy) channel to the estimator input",
+)
+parser.add_argument("--torque_source", "--torque-source", dest="torque_source", choices=("pd", "solver"), default="pd")
+parser.add_argument(
+    "--torque_noise", "--torque-noise", dest="torque_noise", choices=("none", "default", "high"), default="default",
+    help="Torque sensor model preset (estimator/torque.py); only used with --torque-input",
+)
+parser.add_argument(
+    "--action_input", "--action-input", dest="action_input", action="store_true",
+    help="Append the last action to the estimator input (control arm for the torque ablation)",
+)
 parser.add_argument("--est_type", "--estimator", dest="estimator", choices=("LSTM", "TCN", "MLP", "HISTORY_MLP"), default="LSTM")
 parser.add_argument(
     "--window", type=int, default=25,
@@ -99,6 +112,7 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import isaaclab_tasks  # noqa: F401
 
 from jose.estimator.adapters import make_policy_adapter
+from jose.estimator.torque import torque_noise_preset
 from jose.estimator.models import build_estimator
 from jose.estimator.pipeline import (
     HistoryBuffer,
@@ -132,14 +146,21 @@ def main(env_cfg, agent_cfg):
         args_cli.device,
         seed=args_cli.seed,
     )
-    adapter = make_policy_adapter(args_cli.adapter, env, args_cli.joint_preset)
+    adapter = make_policy_adapter(
+        args_cli.adapter, env, args_cli.joint_preset,
+        use_torque=args_cli.torque_input,
+        torque_source=args_cli.torque_source,
+        torque_noise=torque_noise_preset(args_cli.torque_noise),
+        use_action=args_cli.action_input,
+    )
+    input_tag = "enc" + ("+tau" if args_cli.torque_input else "") + ("+act" if args_cli.action_input else "")
     window = 1 if args_cli.estimator == "MLP" else args_cli.window
     estimator = build_estimator(
         args_cli.estimator, adapter.input_dim, adapter.schema.estimator_target_dim,
         args_cli.hidden_size, args_cli.num_layers, tuple(args_cli.tcn_channels), window,
     )
     default_run_name = (
-        f"{args_cli.task}_{args_cli.estimator}_w{window}_{args_cli.joint_preset}_seed{args_cli.seed}_"
+        f"{args_cli.task}_{args_cli.estimator}_w{window}_{args_cli.joint_preset}_{input_tag}_seed{args_cli.seed}_"
         f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
     )
     run_name = args_cli.run_name or default_run_name
@@ -164,6 +185,7 @@ def main(env_cfg, agent_cfg):
         "estimator": args_cli.estimator,
         "window": window,
         "joint_preset": args_cli.joint_preset,
+        "estimator_input": adapter.input_config(),
         "hidden_size": args_cli.hidden_size,
         "num_layers": args_cli.num_layers,
         "tcn_channels": list(args_cli.tcn_channels),

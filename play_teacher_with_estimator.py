@@ -57,7 +57,7 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import isaaclab_tasks  # noqa: F401
 
 from jose.estimator.adapters import make_policy_adapter
-from jose.estimator.pipeline import HistoryBuffer, load_estimator
+from jose.estimator.pipeline import HistoryBuffer, adapter_input_options, load_estimator
 from jose.skrl_compat import disable_velocity_termination_for_evaluation
 from jose.teacher_setup import build_env_and_teacher, uses_rsl_rl
 from jose.tools.rollout_diagnostics import RolloutDiagnostics, unwrap_env_with_robot
@@ -99,7 +99,9 @@ def main(env_cfg, agent_cfg):
     if args_cli.replay_action_log is None:
         teacher_agent.enable_training_mode(False, apply_to_models=True)
         estimator, payload = load_estimator(args_cli.estimator_checkpoint, args_cli.device)
-        adapter = make_policy_adapter(args_cli.adapter, env, payload["joint_preset"])
+        adapter = make_policy_adapter(
+            args_cli.adapter, env, payload["joint_preset"], **adapter_input_options(payload)
+        )
         if payload["task"] != args_cli.task or payload["adapter"] != args_cli.adapter:
             raise ValueError("Estimator checkpoint task/adapter does not match the requested environment")
         if payload["model_config"]["output_dim"] != adapter.schema.estimator_target_dim:

@@ -145,6 +145,23 @@ class RolloutDataset:
         )
 
 
+def gravity_tilt_error_deg(estimate: torch.Tensor, target: torch.Tensor, schema) -> torch.Tensor | None:
+    """Angle in degrees between estimated and true projected gravity, per sample.
+
+    This is the roll-pitch error the teacher reads, independent of the vector's
+    norm. Returns None for schemas without a projected-gravity target.
+    """
+    names = tuple(getattr(schema, "estimator_target_names", ()))
+    wanted = ("projected_gravity_x", "projected_gravity_y", "projected_gravity_z")
+    if not all(name in names for name in wanted):
+        return None
+    ids = torch.as_tensor([names.index(name) for name in wanted], device=estimate.device)
+    predicted = torch.nn.functional.normalize(estimate.index_select(-1, ids), dim=-1)
+    true = torch.nn.functional.normalize(target.index_select(-1, ids), dim=-1)
+    cosine = (predicted * true).sum(dim=-1).clamp(-1.0, 1.0)
+    return torch.rad2deg(torch.acos(cosine))
+
+
 class HistoryBuffer:
     def __init__(self, num_envs: int, window: int, input_dim: int, device: torch.device | str):
         self.values = torch.zeros((num_envs, window, input_dim), device=device)
@@ -287,6 +304,8 @@ def evaluate_estimator_closed_loop(
     deaths = timeouts = 0
     squared_error = torch.zeros(adapter.schema.estimator_target_dim, dtype=torch.float64)
     sample_count = 0
+    tilt_error_sum = 0.0
+    tilt_error_sq_sum = 0.0
     estimator.eval()
     teacher_agent.enable_training_mode(False, apply_to_models=True)
     # Same fidelity metrics every other method reports, so the estimator is not
@@ -304,6 +323,10 @@ def evaluate_estimator_closed_loop(
         estimate = estimator.predict(model_input)
         squared_error += (estimate - target).double().square().sum(dim=0).cpu()
         sample_count += target.shape[0]
+        tilt = gravity_tilt_error_deg(estimate, target, adapter.schema)
+        if tilt is not None:
+            tilt_error_sum += float(tilt.double().sum())
+            tilt_error_sq_sum += float(tilt.double().square().sum())
         action = adapter.action(teacher_agent, adapter.inject_estimate(observations, estimate))
         driving_observations = observations
         observations, rewards, terminated, truncated, _ = env.step(action)
@@ -356,6 +379,8 @@ def evaluate_estimator_closed_loop(
         "success_rate": 100.0 * timeouts / len(completed_lengths),
         "rmse": float(target_rmse.square().mean().sqrt()),
         "target_rmse": target_rmse.tolist(),
+        "tilt_error_deg_mean": tilt_error_sum / max(sample_count, 1),
+        "tilt_error_deg_rmse": (tilt_error_sq_sum / max(sample_count, 1)) ** 0.5,
         **metrics.mean(),
     }
 
@@ -415,13 +440,14 @@ def evaluate_locomotion_grid(
     history: HistoryBuffer | None = None
     squared_error = torch.zeros(adapter.schema.estimator_target_dim, dtype=torch.float64)
     sample_count = 0
+    tilt_sums = [0.0, 0.0]
 
     if estimator is not None:
         estimator.eval()
     teacher_agent.enable_training_mode(False, apply_to_models=True)
 
     def act(observations):
-        nonlocal history, squared_error, sample_count
+        nonlocal history, squared_error, sample_count, tilt_sums
         if estimator is None:
             return adapter.action(teacher_agent, observations)
         if history is None:
@@ -433,6 +459,10 @@ def evaluate_locomotion_grid(
         estimate = estimator.predict(model_input)
         squared_error += (estimate - target).double().square().sum(dim=0).cpu()
         sample_count += target.shape[0]
+        tilt = gravity_tilt_error_deg(estimate, target, adapter.schema)
+        if tilt is not None:
+            tilt_sums[0] += float(tilt.double().sum())
+            tilt_sums[1] += float(tilt.double().square().sum())
         return adapter.action(teacher_agent, adapter.inject_estimate(observations, estimate))
 
     def on_step(dones):
@@ -456,6 +486,8 @@ def evaluate_locomotion_grid(
         target_rmse = (squared_error / sample_count).sqrt().float()
         metrics["grid_rmse"] = float(target_rmse.square().mean().sqrt())
         metrics["grid_target_rmse"] = target_rmse.tolist()
+        metrics["grid_tilt_error_deg_mean"] = tilt_sums[0] / sample_count
+        metrics["grid_tilt_error_deg_rmse"] = (tilt_sums[1] / sample_count) ** 0.5
     return metrics
 
 
@@ -685,6 +717,10 @@ def save_jose_checkpoint(
         # False for every checkpoint written before the JOSE+IMU arm existed;
         # `getattr` is what makes those still loadable.
         "imu_input": getattr(adapter, "use_imu", False),
+        "torque_input": getattr(adapter, "use_torque", False),
+        "torque_source": getattr(adapter, "torque_source", "pd"),
+        "torque_noise": adapter.torque_noise.to_dict() if hasattr(adapter, "torque_noise") else None,
+        "action_input": getattr(adapter, "use_action", False),
         "velocity_source": "sim_joint_velocity",
         "window": window,
         "model_config": model.config() if hasattr(model, "config") else {"type": model.__class__.__name__},
@@ -721,3 +757,21 @@ def load_estimator(path: str | Path, device: str = "cpu") -> tuple[NormalizedEst
     estimator.load_state_dict(payload["model_state_dict"])
     estimator.eval()
     return estimator, payload
+
+
+def adapter_input_options(payload: dict) -> dict:
+    """Adapter keyword arguments that reproduce a checkpoint's estimator input.
+
+    Checkpoints written before the torque arm lack these keys and resolve to the
+    encoder-only configuration.
+    """
+    from .torque import TorqueNoiseCfg
+
+    noise = payload.get("torque_noise") or {}
+    return {
+        "use_imu": bool(payload.get("imu_input", False)),
+        "use_torque": bool(payload.get("torque_input", False)),
+        "torque_source": payload.get("torque_source", "pd"),
+        "torque_noise": TorqueNoiseCfg(**noise),
+        "use_action": bool(payload.get("action_input", False)),
+    }
